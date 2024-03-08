@@ -108,5 +108,8 @@
   },
   "ts-node": {
     "esm": true
-  }
+  },
+  "exclude": [
+    "uploads"
+  ]
 }
