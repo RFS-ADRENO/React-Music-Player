@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes typ {
+    0% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-3px);
+    }
+}
+
+#typing > div {
+    transition: transform 0.2s ease-in-out;
+}
+
+#typing > div:nth-child(1) {
+    animation: typ 1.2s infinite;
+}
+
+#typing > div:nth-child(2) {
+    animation: typ 1.2s infinite 0.05s;
+}
+
+#typing > div:nth-child(3) {
+    animation: typ 1.2s infinite 0.1s;
+}

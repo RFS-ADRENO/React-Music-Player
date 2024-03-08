@@ -1,0 +1,5 @@
+.env
+.env.development
+server/uploads
+
+node_modules
