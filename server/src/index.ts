@@ -84,7 +84,7 @@ app.set("view engine", "ejs");
 app.set("views", "views");
 app.use("/uploads/albums", express.static("uploads/albums"));
 
-app.get("/", async (req, res) => {
+app.get("/add", async (req, res) => {
     const albums = await Album.find().populate("artist");
     const artists = await Artist.find();
 
@@ -95,7 +95,7 @@ app.get("/", async (req, res) => {
 });
 
 app.get("/api/albums", async (req, res) => {
-    const albums = await Album.find()
+    const albums = await Album.find();
     res.json(albums);
 });
 
@@ -113,8 +113,7 @@ app.get("/api/all", async (req, res) => {
     res.json(albums);
 });
 
-app.post(
-    "/api/upload",
+app.post("/api/upload", (req, res) => {
     uploads.fields([
         {
             name: "source",
@@ -128,8 +127,13 @@ app.post(
             name: "newAlbumCover",
             maxCount: 1,
         },
-    ]),
-    async (req, res) => {
+    ])(req, res, async (error) => {
+        if (error instanceof multer.MulterError) {
+            return res.status(400).send(error.message);
+        } else if (error) {
+            return res.status(500).send(error.message);
+        }
+
         try {
             const { song, album, newAlbumTitle, newAlbumYear, artist, newArtistName } = req.body;
             const files = req.files;
@@ -230,7 +234,7 @@ app.post(
 
                 const newAlbumId = v4();
                 if (existsSync(`uploads/albums/${newAlbumId}`))
-                    throw new Error("Album already exists");
+                    return res.status(400).send("Album already exists");
 
                 await mkdir(`uploads/albums/${newAlbumId}`, { recursive: true });
 
@@ -274,7 +278,7 @@ app.post(
 
             const newSongId = v4();
             if (existsSync(`uploads/albums/${targetAlbum.id}/${newSongId}`)) {
-                throw new Error("Song already exists");
+                return res.status(400).send("Song already exists");
             }
 
             console.log(`Creating new song: ${newSongId}`);
@@ -297,7 +301,9 @@ app.post(
                 .addOption("-hls_list_size 0")
                 .addOption("-c copy")
                 .addOption("-f hls")
-                .addOption(`-hls_segment_filename uploads/albums/${targetAlbum.id}/${newSongId}/audio_%03d.ts`)
+                .addOption(
+                    `-hls_segment_filename uploads/albums/${targetAlbum.id}/${newSongId}/audio_%03d.ts`
+                )
                 .output(`uploads/albums/${targetAlbum.id}/${newSongId}/audio.m3u8`)
                 .on("progress", function (progress) {
                     console.log(
@@ -358,8 +364,8 @@ app.post(
             console.error(error);
             res.status(500).json({ message: "An error occurred while uploading the file." });
         }
-    }
-);
+    });
+});
 
 app.listen(process.env.PORT, () => {
     console.log(`Server is running on http://localhost:${process.env.PORT}`);
