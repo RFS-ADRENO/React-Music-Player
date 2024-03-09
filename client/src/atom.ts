@@ -20,35 +20,33 @@ export const settingsAtom = atomWithStorage<Settings>("settings", {
     currentSongId: null,
 });
 
-export type Playlist = {
+export interface IAlbum {
     id: string;
     title: string;
-    songs: {
+    artist: {
         id: string;
-        title: string;
-        playtime: string;
-        source: string;
-        cover: string;
-    }[];
-}[];
+        name: string;
+    };
+    year: number;
+    cover: string;
+}
 
-export type CurrentSong = {
-    songId: string;
-    albumId: string;
-    song: string;
-    album: string;
+export interface ISong {
+    id: string;
+    title: string;
     playtime: string;
     source: string;
     cover: string;
 }
 
-export type Queue = {
-    songId: string;
-    albumId: string;
-    song: string;
-    album: string;
-    playtime: string;
-}[]
+export type Playlist = (IAlbum & { songs: ISong[] })[];
+
+export type FullSongDetails = ISong & {
+    album: IAlbum;
+}
+
+export type CurrentSong = FullSongDetails;
+export type Queue = FullSongDetails[];
 
 export type Settings = {
     shuffle: boolean;

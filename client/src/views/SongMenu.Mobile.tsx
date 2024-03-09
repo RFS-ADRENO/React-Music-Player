@@ -13,6 +13,7 @@ import {
 
 import { useEffect, useState } from "react";
 import playingGif from "../assets/playing.gif";
+import _ from "lodash";
 
 enum Tab {
     PLAYLIST,
@@ -49,14 +50,13 @@ export function SongMenuMobile() {
         setShowSongMenu(false);
     }
 
-    function selectSong({ songId, albumId, song, album, playtime }: Queue[number]) {
+    function selectSong(selectedQueueItem: Queue[number]) {
+        const { id, album } = selectedQueueItem;
         return () => {
-            if (currentSong == null || currentSong.songId != songId) {
-                const findAlbum = playlist.find((a) => a.id == albumId);
-                if (!findAlbum) return;
-                const findSong = findAlbum.songs.find((s) => s.id == songId)!;
+            if (currentSong == null || currentSong.id != id) {
+                if (!playlist.some((a) => a.id == album.id)) return;
 
-                const curIndex = queue.findIndex((e) => e.songId == songId);
+                const curIndex = queue.findIndex((e) => e.id == id);
                 if (curIndex > 0) {
                     for (let i = 0; i < curIndex; i++) {
                         queue.push(queue.shift()!);
@@ -64,21 +64,13 @@ export function SongMenuMobile() {
                 }
 
                 setIsPlaying(false);
-                setCurrentSong({
-                    songId,
-                    albumId,
-                    song,
-                    album,
-                    playtime,
-                    source: findSong.source,
-                    cover: findSong.cover,
-                });
+                setCurrentSong(_.cloneDeep(selectedQueueItem));
                 setSettings((settings) => {
-                    settings.currentSongId = songId;
+                    settings.currentSongId = id;
 
                     return { ...settings };
                 });
-                setQueue([...queue]);
+                setQueue(_.cloneDeep(queue));
             }
         };
     }
@@ -152,7 +144,7 @@ function PlaylistMobile({ selectSong }: PLMProps) {
                 <li className="ml-4" key={i}>
                     <h3
                         className={`font-semibold${
-                            currentSong?.albumId == album.id ? " text-primary" : ""
+                            currentSong?.album?.id == album.id ? " text-primary" : ""
                         }`}
                     >
                         {album.title}
@@ -163,15 +155,15 @@ function PlaylistMobile({ selectSong }: PLMProps) {
                                 <li className="ml-4 mt-px text-sm" key={`${i}.${si}`}>
                                     <div
                                         className="flex items-center cursor-pointer hover:text-[#c9a5b0]"
-                                        onClick={selectSong({
-                                            songId: song.id,
-                                            albumId: album.id,
-                                            song: song.title,
-                                            album: album.title,
-                                            playtime: song.playtime,
-                                        })}
+                                        onClick={() => {
+                                            const { songs, ...rest } = album;
+                                            selectSong({
+                                                ...song,
+                                                album: _.cloneDeep(rest),
+                                            });
+                                        }}
                                     >
-                                        {currentSong && currentSong.songId == song.id ? (
+                                        {currentSong && currentSong.id == song.id ? (
                                             <>
                                                 <div className="text-primary">{song.title}</div>
                                                 <div
@@ -232,8 +224,10 @@ function QueueMobile({ selectSong }: QMProps) {
                                 onClick={selectSong(queue[0])}
                             >
                                 <div className="flex justify-center items-start flex-col">
-                                    <div className="text-primary">{queue[0].song}</div>
-                                    <div className="text-xs text-slate-300">{queue[0].album}</div>
+                                    <div className="text-primary">{queue[0].title}</div>
+                                    <div className="text-xs text-slate-300">
+                                        {queue[0].album.artist.name}
+                                    </div>
                                 </div>
                                 <div className={`text-primary ml-auto${isPlaying ? "" : " mr-4"}`}>
                                     {queue[0].playtime}
@@ -259,7 +253,7 @@ function QueueMobile({ selectSong }: QMProps) {
                         if (isSongAvailable && i == 0) return null;
                         return (
                             <li
-                                key={`queue-item-${e.songId}`}
+                                key={`queue-item-${e.id}`}
                                 className="ml-4 mt-2 text-sm flex justify-start items-center"
                             >
                                 <span className="mr-4">{i + 1}</span>
@@ -268,8 +262,10 @@ function QueueMobile({ selectSong }: QMProps) {
                                     onClick={selectSong(e)}
                                 >
                                     <div className="flex justify-center items-start flex-col">
-                                        <div>{e.song}</div>
-                                        <div className="text-xs text-slate-300">{e.album}</div>
+                                        <div>{e.title}</div>
+                                        <div className="text-xs text-slate-300">
+                                            {e.album.artist.name}
+                                        </div>
                                     </div>
                                     <div className="ml-auto mr-4">{e.playtime}</div>
                                 </div>

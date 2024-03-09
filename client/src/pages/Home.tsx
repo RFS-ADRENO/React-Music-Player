@@ -1,6 +1,7 @@
 import Hls from "hls.js";
 import { useAtom } from "jotai";
 import { useEffect, useMemo, useRef, useState } from "react";
+import _ from "lodash";
 import {
     IoPauseCircle,
     IoPlayBackCircle,
@@ -24,14 +25,6 @@ import {
 } from "../atom";
 
 import { api } from "../api";
-
-function shuffleArray<T>(array: T[]): T[] {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
 
 type AllDataResponse = {
     id: string;
@@ -74,15 +67,7 @@ export default function Home() {
 
     useEffect(() => {
         api.get<AllDataResponse>("/all").then((res) => {
-            setPlaylist(
-                res.data.map((e) => {
-                    return {
-                        id: e.id,
-                        title: e.title,
-                        songs: e.songs,
-                    };
-                })
-            );
+            setPlaylist(res.data);
         });
     }, []);
 
@@ -94,16 +79,12 @@ export default function Home() {
             if (findAlbum) {
                 const findSong = findAlbum.songs.find((e) => e.id == currentSongId)!;
                 setCurrentSong((cs) => {
-                    if (findSong.id == cs?.songId) return cs;
+                    if (findSong.id == cs?.id) return cs;
+                    const { songs, ...rest } = findAlbum;
 
                     return {
-                        songId: currentSongId,
-                        albumId: findAlbum.id,
-                        song: findSong.title,
-                        album: findAlbum.title,
-                        cover: findSong.cover,
-                        source: findSong.source,
-                        playtime: findSong.playtime,
+                        ...findSong,
+                        album: _.cloneDeep(rest),
                     };
                 });
             }
@@ -114,24 +95,21 @@ export default function Home() {
     }, [playlist, settings]);
 
     useEffect(() => {
-        const allSong = playlist.reduce<Queue>((acc, cur) => {
-            return [
-                ...acc,
-                ...cur.songs.map((e) => ({
-                    songId: e.id,
-                    albumId: cur.id,
-                    song: e.title,
-                    album: cur.title,
-                    playtime: e.playtime,
-                })),
-            ];
-        }, []);
+        const allSongFromPlaylist: Queue = [];
+        for (const each of playlist) {
+            const { songs, artist, ...rest } = each;
+            for (const song of songs) {
+                allSongFromPlaylist.push({ ...song, album: { ...rest, artist: { ...artist } } });
+            }
+        }
 
-        if (shuffle) shuffleArray<Queue[number]>(allSong);
+        const allSong = shuffle
+            ? _.shuffle<Queue[number]>(allSongFromPlaylist)
+            : allSongFromPlaylist;
         setQueue((queue) => {
             if (queue.length > 0) {
                 const firstItem = queue[0];
-                const findSongIndex = allSong.findIndex((e) => e.songId == firstItem.songId);
+                const findSongIndex = allSong.findIndex((e) => e.id == firstItem.id);
 
                 if (findSongIndex > 0) {
                     for (let i = 0; i < findSongIndex; i++) {
@@ -140,7 +118,7 @@ export default function Home() {
                 }
             }
 
-            if (allSong.length != 0) setFirstQueueSong(allSong[0].songId);
+            if (allSong.length != 0) setFirstQueueSong(allSong[0].id);
 
             return allSong;
         });
@@ -172,6 +150,21 @@ export default function Home() {
             return isPlaying;
         });
     }, [currentSong]);
+
+    useEffect(() => {
+        setQueue(queue => {
+            if (!currentSong || queue[0]?.id == currentSong.id) return queue;
+
+            const findIndex = queue.findIndex(e => e.id == currentSong.id);
+            if (findIndex == -1) return queue;
+
+            for (let i = 0; i < findIndex; i++) {
+                queue.push(queue.shift()!);
+            }
+
+            return _.cloneDeep(queue);
+        });
+    }, [currentSong])
 
     useEffect(() => {
         if (!audioRef.current) return;
@@ -209,7 +202,7 @@ export default function Home() {
 
         if (repeat == REPEAT.DISABLED) {
             if (queue.length == 1) return false;
-            else if (queue[1].songId == firstQueueSong) return false;
+            else if (queue[1].id == firstQueueSong) return false;
         } else if (repeat == REPEAT.CURRENT) {
             audioRef.current.play();
             return null;
@@ -220,39 +213,29 @@ export default function Home() {
 
     function moveSong(direction: "next" | "previous") {
         return () => {
-            const { songId, albumId, song, album, playtime } =
+            if (queue.length == 0) return;
+            const targetQueue =
                 queue.length == 1
                     ? queue[0]
                     : direction == "next"
                     ? queue[1]
                     : queue[queue.length - 1];
-
-            const findAlbum = playlist.find((e) => e.id == albumId);
-            if (!findAlbum) return;
-            const findSong = findAlbum.songs.find((e) => e.id == songId)!;
+            const { id } = targetQueue;
 
             setQueue((queue) => {
                 if (queue.length > 1) {
                     if (direction == "next") queue.push(queue.shift()!);
                     else queue.unshift(queue.pop()!);
                 }
-                return [...queue];
+                return _.cloneDeep(queue);
             });
 
             setSettings((st) => {
-                st.currentSongId = songId;
+                st.currentSongId = id;
                 return { ...st };
             });
 
-            setCurrentSong({
-                songId,
-                albumId,
-                song,
-                album,
-                playtime,
-                source: findSong.source,
-                cover: findSong.cover,
-            });
+            setCurrentSong(_.cloneDeep(targetQueue));
         };
     }
 
@@ -432,8 +415,10 @@ export default function Home() {
                     </div>
                 </div>
                 <div className="h-12 text-center mt-4">
-                    <h1 className="font-bold">{currentSong?.song || ""}</h1>
-                    <h2 className="font-semibold text-sm">{currentSong?.album || ""}</h2>
+                    <h1 className="font-bold">{currentSong?.title || ""}</h1>
+                    <h2 className="font-semibold text-sm">
+                        {currentSong ? currentSong.album.artist.name : ""}
+                    </h2>
                 </div>
                 <div className="h-6 mt-8">
                     <div className="size-full flex justify-center items-center">
