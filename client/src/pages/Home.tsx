@@ -138,6 +138,9 @@ export default function Home() {
     useEffect(() => {
         if (!audioRef.current) return;
         if (isPlaying) {
+            if (audioRef.current.duration.toFixed(2) == audioRef.current.currentTime.toFixed(2)) {
+                audioRef.current.currentTime -= 0.01;
+            }
             audioRef.current.play();
         } else audioRef.current.pause();
     }, [isPlaying]);
@@ -268,14 +271,16 @@ export default function Home() {
                 setIsPlaying(false);
             }
 
-            moveSong("next")();
+            if (isPlaying) setTimeout(() => {
+                moveSong("next")();
+            }, 300);
         };
         curAudio.addEventListener("ended", handleEnded);
 
         return () => {
             curAudio.removeEventListener("ended", handleEnded);
         };
-    }, [moveSong]);
+    }, [moveSong, isPlaying]);
 
     useEffect(() => {
         const handleKeyPress = (e: KeyboardEvent) => {

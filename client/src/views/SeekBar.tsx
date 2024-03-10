@@ -13,7 +13,6 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
     const [currentTime, setCurrentTime] = useAtom(currentTimeAtom);
     const [tempCurrentTime, setTempCurrentTime] = useState<number | null>(null);
     const seekbarRef = useRef<HTMLDivElement>(null);
-    // const isHolding = useRef(false);
     const [isHolding, setIsHolding] = useState(false);
 
     useEffect(() => {
