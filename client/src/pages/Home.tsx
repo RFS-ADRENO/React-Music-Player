@@ -335,7 +335,7 @@ export default function Home() {
                     <div className="h-6 mt-8 w-full">
                         <div className="size-full flex justify-center items-center">
                             <div className="h-full w-6 bg-gray-600"></div>
-                            <div className="h-full mx-1 flex-1 bg-gray-600"></div>
+                            <div className="h-full mx-2 flex-1 bg-gray-600"></div>
                             <div className="h-full w-6 bg-gray-600"></div>
                         </div>
                     </div>

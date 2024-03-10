@@ -13,19 +13,22 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
     const [currentTime, setCurrentTime] = useAtom(currentTimeAtom);
     const [tempCurrentTime, setTempCurrentTime] = useState<number | null>(null);
     const seekbarRef = useRef<HTMLDivElement>(null);
-    const isHolding = useRef(false);
-    
+    // const isHolding = useRef(false);
+    const [isHolding, setIsHolding] = useState(false);
+
     useEffect(() => {
         function handleMouseDown(e: MouseEvent) {
-            isHolding.current = true;
+            setIsHolding(true);
             lastClickedId.current = e.target ? (e.target as HTMLElement).id || null : null;
         }
+
         function handleMouseUp() {
             setTempCurrentTime(null);
 
             if (
                 (lastClickedId.current == "seekbar-duration" ||
-                    lastClickedId.current == "seekbar-currenttime") &&
+                    lastClickedId.current == "seekbar-currenttime" ||
+                    lastClickedId.current == "seekbar-dot") &&
                 tempCurrentTime != null &&
                 audioRef.current
             ) {
@@ -33,15 +36,26 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
                 audioRef.current.currentTime = tempCurrentTime;
             }
 
-            isHolding.current = false;
+            setIsHolding(false);
             lastClickedId.current = null;
         }
 
+        document.addEventListener("mousedown", handleMouseDown);
+        document.addEventListener("mouseup", handleMouseUp);
+
+        return () => {
+            document.removeEventListener("mousedown", handleMouseDown);
+            document.removeEventListener("mouseup", handleMouseUp);
+        };
+    }, [tempCurrentTime]);
+
+    useEffect(() => {
         function handleMouseMove(event: MouseEvent) {
-            if (isHolding.current == false) return;
+            if (isHolding == false) return;
             if (
                 lastClickedId.current == "seekbar-duration" ||
-                lastClickedId.current == "seekbar-currenttime"
+                lastClickedId.current == "seekbar-currenttime" ||
+                lastClickedId.current == "seekbar-dot"
             ) {
                 if (!seekbarRef.current) return;
 
@@ -59,16 +73,12 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
             }
         }
 
-        document.addEventListener("mousedown", handleMouseDown);
-        document.addEventListener("mouseup", handleMouseUp);
         document.addEventListener("mousemove", handleMouseMove);
 
         return () => {
-            document.removeEventListener("mousedown", handleMouseDown);
-            document.removeEventListener("mouseup", handleMouseUp);
             document.removeEventListener("mousemove", handleMouseMove);
         };
-    }, [duration, tempCurrentTime]);
+    }, [duration, isHolding]);
 
     function formatDuration(duration: number) {
         const minutes = Math.floor(duration / 60);
@@ -80,7 +90,7 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
     const formattedDuration = useMemo(() => formatDuration(duration), [duration]);
     const formattedCurrentTime = useMemo(() => formatDuration(currentTime), [currentTime]);
     const playedPercent = useMemo(
-        () => 100 - (currentTime / duration) * 100,
+        () => (currentTime / duration) * 100,
         [formattedDuration, formattedCurrentTime]
     );
 
@@ -89,7 +99,7 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
         [tempCurrentTime]
     );
     const tempPlayedPercent = useMemo(
-        () => (tempCurrentTime != null ? 100 - (tempCurrentTime / duration) * 100 : null),
+        () => (tempCurrentTime != null ? (tempCurrentTime / duration) * 100 : null),
         [duration, tempCurrentTime]
     );
 
@@ -106,7 +116,7 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
     }
 
     return (
-        <div className="h-6 mt-8">
+        <div className="relative h-6 mt-8">
             <div className="size-full flex justify-center items-center">
                 <div className="text-xs">
                     {formattedTempCurrentTime == null
@@ -114,19 +124,30 @@ export const SeekBar = function SeekBar(props: SeekBarProps) {
                         : formattedTempCurrentTime}
                 </div>
                 <div
-                    className="mx-1 w-full h-1 bg-gray-500 flex-1 relative overflow-hidden rounded-full"
+                    className="group/seekbar mx-2 w-full h-1 bg-gray-500 flex-1 relative rounded-full"
                     ref={seekbarRef}
                     onClick={updateCurrentTime}
                     id="seekbar-duration"
                 >
                     <div
-                        className="absolute inset-0 size-full bg-white"
+                        className="group/seekbar absolute inset-0 h-full bg-white rounded-full"
                         style={{
-                            left: `-${
+                            width: `${
                                 tempPlayedPercent == null ? playedPercent : tempPlayedPercent
                             }%`,
                         }}
                         id="seekbar-currenttime"
+                    ></div>
+                    <div
+                        className={`${
+                            isHolding ? "" : "hidden "
+                        }group-hover/seekbar:block absolute size-2 rounded-full -top-[2px] bg-white`}
+                        id="seekbar-dot"
+                        style={{
+                            left: `calc(${
+                                tempPlayedPercent == null ? playedPercent : tempPlayedPercent
+                            }% - 0.25rem)`,
+                        }}
                     ></div>
                 </div>
                 <div className="text-xs">{formattedDuration}</div>
