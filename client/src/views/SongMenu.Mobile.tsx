@@ -66,9 +66,9 @@ export function SongMenuMobile() {
                 setIsPlaying(false);
                 setCurrentSong(_.cloneDeep(selectedQueueItem));
                 setSettings((settings) => {
-                    settings.currentSongId = id;
+                    settings!.currentSongId = id;
 
-                    return { ...settings };
+                    return { ...settings! };
                 });
                 setQueue(_.cloneDeep(queue));
             }
@@ -160,7 +160,7 @@ function PlaylistMobile({ selectSong }: PLMProps) {
                                             selectSong({
                                                 ...song,
                                                 album: _.cloneDeep(rest),
-                                            });
+                                            })();
                                         }}
                                     >
                                         {currentSong && currentSong.id == song.id ? (

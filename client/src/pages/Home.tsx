@@ -1,21 +1,14 @@
 import Hls from "hls.js";
 import { useAtom } from "jotai";
-import { useEffect, useMemo, useRef, useState } from "react";
 import _ from "lodash";
-import {
-    IoPauseCircle,
-    IoPlayBackCircle,
-    IoPlayCircleSharp,
-    IoPlayForwardCircle,
-    IoShuffle,
-} from "react-icons/io5";
-import { TbRepeat, TbRepeatOff, TbRepeatOnce } from "react-icons/tb";
-import { Header, SongMenuMobile } from "../views";
+import { useEffect, useRef, useState } from "react";
+import { Actions, Header, SeekBar, SongInfo, SongMenuMobile } from "../views";
 
-import PPLogoGray from "../assets/pp-logo-gray.png";
 import {
     REPEAT,
     currentSongAtom,
+    currentTimeAtom,
+    durationAtom,
     firstQueueSongAtom,
     isPlayingAtom,
     playlistAtom,
@@ -48,12 +41,9 @@ export default function Home() {
     const [isPlaying, setIsPlaying] = useAtom(isPlayingAtom);
     const [shuffle, setShuffle] = useState(false);
     const [repeat, setRepeat] = useState<REPEAT>(REPEAT.DISABLED);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-    const [tempCurrentTime, setTempCurrentTime] = useState<number | null>(null);
+    const [, setCurrentTime] = useAtom(currentTimeAtom);
+    const [duration, setDuration] = useAtom(durationAtom);
     const audioRef = useRef<HTMLMediaElement>(null);
-    const seekbarRef = useRef<HTMLDivElement>(null);
-    const isHolding = useRef(false);
     const lastClickedId = useRef<string | null>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [firstQueueSong, setFirstQueueSong] = useAtom(firstQueueSongAtom);
@@ -63,15 +53,36 @@ export default function Home() {
     const [playlist, setPlaylist] = useAtom(playlistAtom);
     const [settings, setSettings] = useAtom(settingsAtom);
 
+    const isLocalDataLoaded = currentSong !== undefined;
     const isSongAvailable = currentSong != null;
 
+    function saveSettings(value: string) {
+        localStorage.setItem("settings", value);
+    }
+
     useEffect(() => {
+        const settingsFromLocal = localStorage.getItem("settings");
+
+        if (settingsFromLocal == null) {
+            const defaultSettings = {
+                shuffle: false,
+                repeat: REPEAT.DISABLED,
+                currentSongId: null,
+            };
+
+            setSettings(defaultSettings);
+            saveSettings(JSON.stringify(defaultSettings));
+        } else {
+            setSettings(JSON.parse(settingsFromLocal));
+        }
+
         api.get<AllDataResponse>("/all").then((res) => {
             setPlaylist(res.data);
         });
     }, []);
 
     useEffect(() => {
+        if (settings == null) return;
         const { currentSongId, repeat, shuffle } = settings;
 
         if (currentSongId) {
@@ -88,7 +99,7 @@ export default function Home() {
                     };
                 });
             }
-        }
+        } else setCurrentSong(null);
 
         setRepeat(repeat);
         setShuffle(shuffle);
@@ -143,8 +154,14 @@ export default function Home() {
             hlsRef.current.attachMedia(audioRef.current);
         }
 
-        if (currentSong?.source)
-            hlsRef.current.loadSource(`${import.meta.env.VITE_BACKEND_URL}${currentSong.source}`);
+        if (currentSong !== undefined) {
+            if (currentSong?.source)
+                hlsRef.current.loadSource(
+                    `${import.meta.env.VITE_BACKEND_URL}${currentSong.source}`
+                );
+            setDuration(0);
+        }
+
         setIsPlaying((isPlaying) => {
             if (isPlaying && audioRef.current) audioRef.current.play().catch((_) => {});
             return isPlaying;
@@ -152,10 +169,10 @@ export default function Home() {
     }, [currentSong]);
 
     useEffect(() => {
-        setQueue(queue => {
+        setQueue((queue) => {
             if (!currentSong || queue[0]?.id == currentSong.id) return queue;
 
-            const findIndex = queue.findIndex(e => e.id == currentSong.id);
+            const findIndex = queue.findIndex((e) => e.id == currentSong.id);
             if (findIndex == -1) return queue;
 
             for (let i = 0; i < findIndex; i++) {
@@ -164,7 +181,7 @@ export default function Home() {
 
             return _.cloneDeep(queue);
         });
-    }, [currentSong])
+    }, [currentSong]);
 
     useEffect(() => {
         if (!audioRef.current) return;
@@ -231,8 +248,9 @@ export default function Home() {
             });
 
             setSettings((st) => {
-                st.currentSongId = id;
-                return { ...st };
+                st!.currentSongId = id;
+                saveSettings(JSON.stringify(st));
+                return { ...st! };
             });
 
             setCurrentSong(_.cloneDeep(targetQueue));
@@ -275,218 +293,60 @@ export default function Home() {
         };
     }, [isSongAvailable]);
 
-    useEffect(() => {
-        function handleMouseDown(e: MouseEvent) {
-            isHolding.current = true;
-            lastClickedId.current = e.target ? (e.target as HTMLElement).id || null : null;
-        }
-        function handleMouseUp() {
-            setTempCurrentTime(null);
-
-            if (
-                (lastClickedId.current == "seekbar-duration" ||
-                    lastClickedId.current == "seekbar-currenttime") &&
-                tempCurrentTime != null &&
-                audioRef.current
-            ) {
-                setCurrentTime(tempCurrentTime);
-                audioRef.current.currentTime = tempCurrentTime;
-            }
-
-            isHolding.current = false;
-            lastClickedId.current = null;
-        }
-
-        function handleMouseMove(event: MouseEvent) {
-            if (isHolding.current == false) return;
-            if (
-                lastClickedId.current == "seekbar-duration" ||
-                lastClickedId.current == "seekbar-currenttime"
-            ) {
-                if (!seekbarRef.current) return;
-
-                const { clientX } = event;
-                const { x, width } = seekbarRef.current.getBoundingClientRect();
-
-                if (clientX >= x && clientX <= x + width) {
-                    const targetPercent = (clientX - x) / width;
-                    const targetTime = targetPercent * duration;
-
-                    setTempCurrentTime(targetTime);
-                } else {
-                    setTempCurrentTime(clientX < x ? 0 : duration);
-                }
-            }
-        }
-
-        document.addEventListener("mousedown", handleMouseDown);
-        document.addEventListener("mouseup", handleMouseUp);
-        document.addEventListener("mousemove", handleMouseMove);
-
-        return () => {
-            document.removeEventListener("mousedown", handleMouseDown);
-            document.removeEventListener("mouseup", handleMouseUp);
-            document.removeEventListener("mousemove", handleMouseMove);
-        };
-    }, [duration, tempCurrentTime]);
-
-    function toggleRepeat() {
-        let repeatMode = REPEAT.DISABLED;
-
-        if (repeat == REPEAT.DISABLED) repeatMode = REPEAT.PLAYLIST;
-        else if (repeat == REPEAT.PLAYLIST) repeatMode = REPEAT.CURRENT;
-
-        setSettings((st) => {
-            st.repeat = repeatMode;
-            return { ...st };
-        });
-        setRepeat(repeatMode);
-    }
-
-    function toggleShuffle() {
-        setSettings((st) => {
-            st.shuffle = !shuffle;
-            return { ...st };
-        });
-        setShuffle(!shuffle);
-    }
-
-    function togglePlay() {
-        if (!audioRef.current) return;
-        setIsPlaying(!isPlaying);
-    }
-
-    function formatDuration(duration: number) {
-        const minutes = Math.floor(duration / 60);
-        const seconds = Math.floor(duration - minutes * 60);
-
-        return `${minutes}:${seconds < 10 ? `0${seconds}` : seconds}`;
-    }
-
-    const formattedDuration = useMemo(() => formatDuration(duration), [duration]);
-    const formattedCurrentTime = useMemo(() => formatDuration(currentTime), [currentTime]);
-    const playedPercent = useMemo(
-        () => 100 - (currentTime / duration) * 100,
-        [formattedDuration, formattedCurrentTime]
-    );
-
-    const formattedTempCurrentTime = useMemo(
-        () => (tempCurrentTime != null ? formatDuration(tempCurrentTime) : null),
-        [tempCurrentTime]
-    );
-    const tempPlayedPercent = useMemo(
-        () => (tempCurrentTime != null ? 100 - (tempCurrentTime / duration) * 100 : null),
-        [duration, tempCurrentTime]
-    );
-
-    function updateCurrentTime(event: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-        if (!seekbarRef.current || !audioRef.current) return;
-
-        const { clientX } = event;
-        const { x, width } = seekbarRef.current.getBoundingClientRect();
-
-        const targetPercent = (clientX - x) / width;
-        const targetTime = targetPercent * duration;
-
-        audioRef.current.currentTime = targetTime;
-    }
+    const isReady = settings != null && isLocalDataLoaded && duration != -1;
 
     return (
         <div className="h-screen w-full bg-primary">
             <Header />
             <SongMenuMobile />
-            <div
-                className="w-72 mx-auto overflow-hidden"
-                style={{
-                    height: "calc(100vh-3.5rem)",
-                }}
-            >
-                <div className="mt-14">
-                    <div className="size-72 mx-auto bg-black text-white">
-                        <img
-                            src={
-                                currentSong?.cover
-                                    ? `${import.meta.env.VITE_BACKEND_URL}${currentSong.cover}`
-                                    : PPLogoGray
-                            }
-                            alt="cover"
-                            className="size-full"
-                        />
+            {isReady ? (
+                <div
+                    className="w-72 mx-auto overflow-hidden"
+                    style={{
+                        height: "calc(100vh-3.5rem)",
+                    }}
+                >
+                    <SongInfo />
+                    <SeekBar
+                        audioRef={audioRef}
+                        lastClickedId={lastClickedId}
+                        duration={duration}
+                    />
+                    <Actions
+                        audioRef={audioRef}
+                        isSongAvailable={isSongAvailable}
+                        moveSong={moveSong}
+                    />
+                </div>
+            ) : (
+                <div
+                    className="w-72 mx-auto overflow-hidden animate-pulse"
+                    style={{
+                        height: "calc(100vh-3.5rem)",
+                    }}
+                >
+                    <div className="mt-14">
+                        <div className="relative size-72 mx-auto bg-gray-600 text-white"></div>
                     </div>
-                </div>
-                <div className="h-12 text-center mt-4">
-                    <h1 className="font-bold">{currentSong?.title || ""}</h1>
-                    <h2 className="font-semibold text-sm">
-                        {currentSong ? currentSong.album.artist.name : ""}
-                    </h2>
-                </div>
-                <div className="h-6 mt-8">
-                    <div className="size-full flex justify-center items-center">
-                        <div className="text-xs">
-                            {formattedTempCurrentTime == null
-                                ? formattedCurrentTime
-                                : formattedTempCurrentTime}
+                    <div className="mt-4 flex flex-col justify-center items-center">
+                        <h1 className="font-bold bg-gray-600 h-6 w-full"></h1>
+                        <h2 className="font-semibold text-xs bg-gray-600 mt-2 h-4 w-full"></h2>
+                    </div>
+                    <div className="h-6 mt-8 w-full">
+                        <div className="size-full flex justify-center items-center">
+                            <div className="h-full w-6 bg-gray-600"></div>
+                            <div className="h-full mx-1 flex-1 bg-gray-600"></div>
+                            <div className="h-full w-6 bg-gray-600"></div>
                         </div>
-                        <div
-                            className="mx-1 w-full h-1 bg-gray-500 flex-1 relative overflow-hidden rounded-full"
-                            ref={seekbarRef}
-                            onClick={updateCurrentTime}
-                            id="seekbar-duration"
-                        >
-                            <div
-                                className="absolute inset-0 size-full bg-white"
-                                style={{
-                                    left: `-${
-                                        tempPlayedPercent == null
-                                            ? playedPercent
-                                            : tempPlayedPercent
-                                    }%`,
-                                }}
-                                id="seekbar-currenttime"
-                            ></div>
+                    </div>
+                    <div className="h-16 mt-2">
+                        <div className="size-full flex justify-center items-center">
+                            <div className="h-full w-full  bg-gray-600"></div>
                         </div>
-                        <div className="text-xs">{formattedDuration}</div>
                     </div>
                 </div>
-                <div className="h-16 mt-2">
-                    <div className="size-full flex justify-center items-center">
-                        <button disabled={!isSongAvailable} onClick={toggleShuffle}>
-                            <IoShuffle size={34} color={`${shuffle ? "#208a2e" : "#a8a8a8"}`} />
-                        </button>
-                        <button
-                            disabled={!isSongAvailable}
-                            className="ml-4"
-                            onClick={moveSong("previous")}
-                        >
-                            <IoPlayBackCircle size={40} />
-                        </button>
-                        <button disabled={!isSongAvailable} className="ml-2" onClick={togglePlay}>
-                            {isPlaying ? (
-                                <IoPauseCircle size={56} />
-                            ) : (
-                                <IoPlayCircleSharp size={56} />
-                            )}
-                        </button>
-                        <button
-                            disabled={!isSongAvailable}
-                            className="ml-2"
-                            onClick={moveSong("next")}
-                        >
-                            <IoPlayForwardCircle size={40} />
-                        </button>
-                        <button disabled={!isSongAvailable} className="ml-4" onClick={toggleRepeat}>
-                            {repeat == REPEAT.DISABLED ? (
-                                <TbRepeatOff size={34} color="#a8a8a8" />
-                            ) : repeat == REPEAT.PLAYLIST ? (
-                                <TbRepeat size={34} color="#208a2e" />
-                            ) : (
-                                <TbRepeatOnce size={34} color="#208a2e" />
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <audio ref={audioRef} className="hidden" />
+            )}
+            <audio ref={audioRef} key="hidden-audio" className="hidden" />
         </div>
     );
 }
