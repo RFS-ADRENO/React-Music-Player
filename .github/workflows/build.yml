@@ -39,16 +39,14 @@ jobs:
 
     - name: Package built code
       run: |
-        mkdir build
+        mkdir -p build/client build/server
         cp -r client/dist build/client
         cp -r client/package.json build/client
         cp -r server/dist build/server
         cp -r server/package.json build/server
-        cd build
-        zip -r build.zip client server
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v4.3.1
       with:
         name: build
-        path: build/build.zip
+        path: build
